@@ -1,4 +1,4 @@
-/*
+/* -*- c++ -*- 
 
   Wetland Sensor - reads from AquaTroll sensor, emails data over cell phone
   
@@ -7,19 +7,29 @@
   
 */
 
-uint8_t zReadRegs(uint16_t addr, uint16_t count);
-
+#include <NewSoftSerial.h>
+#include <SSerial2Mobile.h>
 #include "ModbusMaster.h"
+
+uint8_t zReadRegs(uint16_t addr, uint16_t count);
+#define RXpin 10 //Green
+#define TXpin 11 //Red
 
 // instantiate ModbusMaster object as serial port 1 slave ID 1
 ModbusMaster node(1, 1);
 
+int email_sent = 0;
 int attempt = 0;
 
+int send_email(void);
+
+int data_ready;
+unsigned temperature[2];
+unsigned pressure[2];
 
 void setup()
 {
-  pinMode(DE_PIN, OUTPUT);
+    pinMode(DE_PIN, OUTPUT);
 
   // initialize Modbus communication baud rate
   node.begin(19200);
@@ -90,16 +100,16 @@ void loop()
    Serial.write("Pressure: ");
    zReadRegs(45, 8);
 
-#if 0
-  Serial.write("ID: ");
-  zReadRegs(1, 1);
-  Serial.write("Serial No.: ");
-  zReadRegs(2, 2);
-  Serial.write("Status: ");
-  zReadRegs(4, 1);
-  Serial.write("Last calibration: ");
-  zReadRegs(5, 3);
-  Serial.write("Next calibration: ");
-  zReadRegs(8, 3);
-#endif
+   if (!email_sent && data_ready) {
+       send_email();
+   }
+}
+
+int send_email(void) {
+    SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
+    delay(3000);
+    phone.on();
+    delay(4000);
+    phone.sendEmail("embeddedlinuxguy@gmail.com", "HEY WATSON! EMAIL IS CRAZY! I NEED YOU!!");
+    return 0;
 }
