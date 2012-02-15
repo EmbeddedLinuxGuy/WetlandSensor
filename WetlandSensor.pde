@@ -11,9 +11,11 @@
 #include "SSerial2Mobile.h"
 #include "ModbusMaster.h"
 
-uint32_t zReadRegs(uint16_t addr, uint16_t count);
 #define RXpin 10 //Green
 #define TXpin 11 //Red
+SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
+
+uint32_t zReadRegs(uint16_t addr, uint16_t count);
 
 // instantiate ModbusMaster object as serial port 1 slave ID 1
 ModbusMaster node(1, 1);
@@ -121,7 +123,6 @@ void loop()
 }
 
 int send_email(void) {
-    SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
     Serial.println("About to send email: please wait 60 seconds.");
     delay(3000);
     phone.on();
@@ -133,7 +134,6 @@ int send_email(void) {
 }
 
 int send_email2(void) {
-    SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
     phone.begin();
     phone.on();
     //  returnVal=phone.isOK();
@@ -162,14 +162,15 @@ int send_email2(void) {
     Serial.println("Sent tickle");
     //  delay(60000);
 
-    // phone.sendTxtMode();
-    //Serial.println("Sent text mode command");
-    //phone.sendTxtNumber("+14153597320");
-    //Serial.println("Sent number");
-    //phone.sendTxtMsg("To what doth it do???");
-    //Serial.println("Sent message");
+     phone.sendTxtMode();
+    Serial.println("Sent text mode command");
+    phone.sendTxtNumber("+14153597320");
+    Serial.println("Sent number");
+    phone.sendTxtMsg("To what doth it do???");
+    Serial.println("Sent message");
 
     Serial.print("Sending email...");
     phone.sendEmail("embeddedlinuxguy@gmail.com", "dO THe Fnord");
     Serial.println(" sent.");
+    delay(3000);
 }
