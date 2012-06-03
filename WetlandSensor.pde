@@ -7,18 +7,20 @@
   
 */
 
+#undef WAIT_ON_INPUT
+
 #include <NewSoftSerial.h>
 #include "SSerial2Mobile.h"
 #include "ModbusMaster.h"
 
 #define RXpin 10 //Green
 #define TXpin 11 //Red
-SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count);
 
 // instantiate ModbusMaster object as serial port 1 slave ID 1
 ModbusMaster node(1, 1);
+SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
 
 int email_sent = 0;
 int attempt = 0;
@@ -30,12 +32,16 @@ int data_ready = 1; //0
 uint32_t temperature;
 uint32_t pressure;
 
-#define PRESSURE_REG 45
-#define TEMPERATURE_REG 37
+#define PRESSURE_REG 37
+#define TEMPERATURE_REG 45
+
+#define PHONE_PIN 9
 
 void setup()
 {
     pinMode(DE_PIN, OUTPUT);
+    pinMode(PHONE_PIN, OUTPUT);
+    digitalWrite(PHONE_PIN, LOW);
 
   // initialize Modbus communication baud rate
   node.begin(19200);
@@ -92,7 +98,7 @@ void loop()
   static uint32_t i;
   uint8_t j, result;
   uint16_t data[6];
-
+#ifdef WAIT_FOR_INPUT
   // Wait on serial console input to start sensing
   if (attempt <= 1 && !Serial.available()) {
     return;
@@ -104,7 +110,7 @@ void loop()
   }
 
   attempt--;
-
+#endif
   if (!data_ready) {
       Serial.write("Initial register read: ");
       zReadRegs(0, 1);
@@ -134,6 +140,7 @@ int send_email(void) {
 }
 
 int send_email2(void) {
+    digitalWrite(PHONE_PIN, HIGH);
     phone.begin();
     phone.on();
     //  returnVal=phone.isOK();
@@ -173,4 +180,5 @@ int send_email2(void) {
     phone.sendEmail("embeddedlinuxguy@gmail.com", "dO THe Fnord");
     Serial.println(" sent.");
     delay(3000);
+    digitalWrite(PHONE_PIN, LOW);
 }
