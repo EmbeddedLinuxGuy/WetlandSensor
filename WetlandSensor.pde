@@ -7,11 +7,8 @@
   
 */
 
-#undef WAIT_ON_INPUT
-
-#include <NewSoftSerial.h>
-#include "SSerial2Mobile.h"
-#include "ModbusMaster.h"
+#undef WAIT_ON_INPUT // define if there is a console connected
+int data_ready = 0; // set to 1 if there is no sensor
 
 #define RXpin 10 //Green
 #define TXpin 11 //Red
@@ -20,7 +17,9 @@
 #define PRESSURE_REG 37
 #define TEMPERATURE_REG 45
 
-int data_ready = 1; //0
+#include <NewSoftSerial.h>
+#include "SSerial2Mobile.h"
+#include "ModbusMaster.h"
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count);
 int send_email(void);
@@ -146,12 +145,32 @@ int send_email(void) {
   // voice:  10
   // data:  20
   
-  
     delay(1000);
     phone.sendTickle();
     Serial.println("Sent tickle");
+
+     phone.sendTxtMode();
+    Serial.println("Sent text mode command");
+    phone.sendTxtNumber("+14153597320");
+    Serial.println("Sent number");
+    phone.sendTxtMsg("To what doth it do???");
+    Serial.println("Sent message");
+
+
     Serial.print("Sending email...");
-    phone.sendEmail("embeddedlinuxguy@gmail.com", "dO THe Fnord");
+
+    unsigned long *t = (unsigned long *)&temperature;
+    unsigned long *p = (unsigned long *)&pressure;
+    unsigned long mask = 0x0000003f;
+    int i;
+    char msg[7];
+    for (i = 0; i < 6; ++i) {
+	msg[i] = ' ' + (char)(mask & (*t >> 6*i));
+    }
+    msg[6] = 0;
+    
+    phone.sendEmail("embeddedlinuxguy@gmail.com", msg);
+
     Serial.println(" sent.");
     delay(3000);
     digitalWrite(PHONE_PIN, LOW);
