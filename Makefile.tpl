@@ -1,4 +1,4 @@
-
+# -*- Makefile -*-
 #########  AVR Project Makefile Template   #########
 ######                                        ######
 ######    Copyright (C) 2003-2005,Pat Deegan, ######
@@ -66,7 +66,7 @@
 # Name of target controller 
 # (e.g. 'at90s8515', see the available avr-gcc mmcu 
 # options for possible values)
-MCU=atmega8
+MCU=atmega328p
 
 # id to use with programmer
 # default: PROGRAMMER_MCU=$(MCU)
@@ -117,7 +117,7 @@ AVRDUDE_PROGRAMMERID=stk500
 # port--serial or parallel port to which your 
 # hardware programmer is attached
 #
-AVRDUDE_PORT=/dev/ttyS1
+AVRDUDE_PORT=/dev/ttyUSB0
 
 
 ####################################################
@@ -292,10 +292,8 @@ gdbinit: $(GDBINITFILE)
 
 $(GDBINITFILE): $(TRG)
 	@echo "file $(TRG)" > $(GDBINITFILE)
-	
 	@echo "target remote localhost:1212" \
 		                >> $(GDBINITFILE)
-	
 	@echo "load"        >> $(GDBINITFILE) 
 	@echo "break main"  >> $(GDBINITFILE)
 	@echo "continue"    >> $(GDBINITFILE)
@@ -310,8 +308,5 @@ clean:
 	$(REMOVE) $(LST) $(GDBINITFILE)
 	$(REMOVE) $(GENASMFILES)
 	$(REMOVE) $(HEXTRG)
-	
-
 
 #####                    EOF                   #####
-
