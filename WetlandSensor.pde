@@ -15,27 +15,25 @@
 
 #define RXpin 10 //Green
 #define TXpin 11 //Red
+#define PHONE_PIN 9
+
+#define PRESSURE_REG 37
+#define TEMPERATURE_REG 45
+
+int data_ready = 1; //0
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count);
+int send_email(void);
 
 // instantiate ModbusMaster object as serial port 1 slave ID 1
 ModbusMaster node(1, 1);
 SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
 
-int email_sent = 0;
-int attempt = 0;
-
-int send_email(void);
-int send_email2(void);
-
-int data_ready = 1; //0
 uint32_t temperature;
 uint32_t pressure;
 
-#define PRESSURE_REG 37
-#define TEMPERATURE_REG 45
-
-#define PHONE_PIN 9
+int email_sent = 0;
+int attempt = 0;
 
 void setup()
 {
@@ -123,23 +121,12 @@ void loop()
       }
   }
   if (!email_sent && data_ready) {
-      send_email2();
+      send_email();
       email_sent = 1;
   }
 }
 
 int send_email(void) {
-    Serial.println("About to send email: please wait 60 seconds.");
-    delay(3000);
-    phone.on();
-    delay(57000);
-    Serial.print("Sending...");
-    phone.sendEmail("embeddedlinuxguy@gmail.com", "HEY WATSON! EMAIL IS CRAZY! I NEED YOU!!");
-    Serial.println(" sent.");
-    return 0;
-}
-
-int send_email2(void) {
     digitalWrite(PHONE_PIN, HIGH);
     phone.begin();
     phone.on();
@@ -161,21 +148,8 @@ int send_email2(void) {
   
   
     delay(1000);
-    //  Serial.println("Sending Text");
-    //  phone.sendTxt("+14153122169","To what doth it do???");
-    //  phone.sendTxt("+14153597320","To what doth it do???");
-    
     phone.sendTickle();
     Serial.println("Sent tickle");
-    //  delay(60000);
-
-     phone.sendTxtMode();
-    Serial.println("Sent text mode command");
-    phone.sendTxtNumber("+14153597320");
-    Serial.println("Sent number");
-    phone.sendTxtMsg("To what doth it do???");
-    Serial.println("Sent message");
-
     Serial.print("Sending email...");
     phone.sendEmail("embeddedlinuxguy@gmail.com", "dO THe Fnord");
     Serial.println(" sent.");
