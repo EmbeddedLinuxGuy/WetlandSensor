@@ -7,7 +7,7 @@
   
 */
 
-#undef WAIT_ON_INPUT // define if there is a console connected
+#undef WAIT_FOR_USER // define if there is a console connected
 int data_ready = 0; // set to 1 if there is no sensor
 
 #define RXpin 10 //Green
@@ -16,6 +16,8 @@ int data_ready = 0; // set to 1 if there is no sensor
 
 #define PRESSURE_REG 37
 #define TEMPERATURE_REG 45
+#define LEVEL_REG 53
+#define SALINITY_REG 77
 
 #include <NewSoftSerial.h>
 #include "SSerial2Mobile.h"
@@ -28,11 +30,19 @@ int send_email(void);
 ModbusMaster node(1, 1);
 SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
 
-uint32_t temperature;
-uint32_t pressure;
-
 int email_sent = 0;
 int attempt = 0;
+
+//uint32_t temperature;
+uint32_t pressure;
+uint32_t salinity;
+uint32_t level;
+
+//http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1243894373/all
+#define _8e1_or  B00100000
+#define _8e1_and B11101111
+#define sensor_baud_rate 19200
+#define debug_baud_rate 19200
 
 void setup()
 {
@@ -40,23 +50,17 @@ void setup()
     pinMode(PHONE_PIN, OUTPUT);
     digitalWrite(PHONE_PIN, LOW);
 
-  // initialize Modbus communication baud rate
-  node.begin(19200);
+    // initialize Modbus
+    node.begin(sensor_baud_rate);
 
-  //UCSR0C = UCSR0C | B00100000;
-//UCSR0C = UCSR0C & B11101111;
+    // Set Serial 1 (Node) to 8E1 (Serial 0 == UCSR0C)
+    UCSR1C |= _8e1_or;
+    UCSR1C &= _8e1_and;
 
-  // Set Serial 1 (Node) to 8E1
-  //http://www.arduino.cc/cgi-bin/yabb2/YaBB.pl?num=1243894373/all
-  UCSR1C |= B00100000;
-  UCSR1C &= B11101111;
-
-  //  Serial1.begin(19200);
-  Serial.begin(19200);
-  Serial.println("Press ENTER to start reading data.");
-  attempt = 0;
+    Serial.begin(debug_baud_rate);
+    Serial.println("Press ENTER to start reading data.");
+    attempt = 0;
 }
-
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count) {
   uint8_t j, result;
@@ -95,7 +99,8 @@ void loop()
   static uint32_t i;
   uint8_t j, result;
   uint16_t data[6];
-#ifdef WAIT_FOR_INPUT
+
+#ifdef WAIT_FOR_USER
   // Wait on serial console input to start sensing
   if (attempt <= 1 && !Serial.available()) {
     return;
@@ -107,15 +112,19 @@ void loop()
   }
 
   attempt--;
-#endif
+#endif // WAIT_FOR_USER
+
   if (!data_ready) {
       Serial.write("Initial register read: ");
       zReadRegs(0, 1);
-      Serial.write("Temperature: ");
-      temperature = zReadRegs(TEMPERATURE_REG, 8);
+      Serial.write("Salinity: ");
+      salinity = zReadRegs(SALINITY_REG, 8);
+      Serial.write("Level: ");
+      level = zReadRegs(LEVEL_REG, 8);
       Serial.write("Pressure: ");
       pressure = zReadRegs(PRESSURE_REG, 8);
-      if (temperature != 0xdeadbeef && pressure != 0xdeadbeef) {
+      // XXX substitute invalid floating point value for 0xdeadbeef
+      if (salinity != 0xdeadbeef && pressure != 0xdeadbeef && pressure != 0xdeadbeef) {
 	  data_ready = 1;
       }
   }
@@ -127,12 +136,20 @@ void loop()
 
 int send_email(void) {
     digitalWrite(PHONE_PIN, HIGH);
+    Serial.println("Please wait 5 seconds for the phone to power up");
+    //    delay(30000);
+    delay(5000);
+    Serial.println("Initializing serial port / Soft Reset and waiting 30 seconds");
     phone.begin();
     phone.on();
+    delay(30000);
+
+    //    Serial.println("Please wait 60 seconds for the phone to turn on");
+    //    delay(1000);
     //  returnVal=phone.isOK();
     // Serial.println(returnVal, DEC);
-    Serial.println("Please wait 60 seconds for the phone to turn on");
-    delay(60000);
+    //    Serial.println("Please wait 60 seconds for the phone to get ready");
+    //    delay(1000);
 
     Serial.print("Batt: ");
     Serial.print(phone.batt());
@@ -148,30 +165,35 @@ int send_email(void) {
     delay(1000);
     phone.sendTickle();
     Serial.println("Sent tickle");
-
+    /*
      phone.sendTxtMode();
     Serial.println("Sent text mode command");
     phone.sendTxtNumber("+14153597320");
     Serial.println("Sent number");
     phone.sendTxtMsg("To what doth it do???");
     Serial.println("Sent message");
+    */
+    Serial.print("About to send email...");
 
+    unsigned long *sval = (unsigned long *)&salinity;
+    unsigned long *pval = (unsigned long *)&pressure;
+    unsigned long *lval = (unsigned long *)&level;
 
-    Serial.print("Sending email...");
-
-    unsigned long *t = (unsigned long *)&temperature;
-    unsigned long *p = (unsigned long *)&pressure;
     unsigned long mask = 0x0000003f;
-    int i;
     char msg[7];
-    for (i = 0; i < 6; ++i) {
-	msg[i] = ' ' + (char)(mask & (*t >> 6*i));
+    for (int i = 0; i < 6; ++i) {
+	msg[i] = ' ' + (char)(mask & (*sval >> 6*i));
     }
     msg[6] = 0;
-    
+ 
+   
     phone.sendEmail("embeddedlinuxguy@gmail.com", msg);
+    Serial.println(" sent. Waiting 15 seconds for phone to finish.");
 
-    Serial.println(" sent.");
-    delay(3000);
+    for (int i = 0; i < 15; ++i) {
+	Serial.println(i);
+	delay(1000);
+    }
+
     digitalWrite(PHONE_PIN, LOW);
 }
