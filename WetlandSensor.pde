@@ -22,6 +22,7 @@ int data_ready = 0; // set to 1 if there is no sensor
 #include <NewSoftSerial.h>
 #include "SSerial2Mobile.h"
 #include "ModbusMaster.h"
+#include <SoftwareSerial.h>
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count);
 int send_email(void);
@@ -138,16 +139,17 @@ void loop()
 }
 
 int send_email(void) {
-    digitalWrite(PHONE_PIN, HIGH);
+    /*    digitalWrite(PHONE_PIN, HIGH); */
+    digitalWrite(PHONE_PIN, LOW);
     SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
 
     Serial.println("Please wait 5 seconds for the phone to power up");
     //    delay(30000);
-    delay(5000);
-    Serial.println("Initializing serial port / Soft Reset and waiting 30 seconds");
+    //    delay(5000);
+    Serial.println("Initializing serial port / Soft Reset and waiting 60 seconds");
     phone.begin();
     phone.on();
-    delay(30000);
+    delay(60000);
 
     //    Serial.println("Please wait 60 seconds for the phone to turn on");
     //    delay(1000);
@@ -194,6 +196,8 @@ int send_email(void) {
  
    
     phone.sendEmail("embeddedlinuxguy@gmail.com", "FNORD HELLO HELLO");
+    //phone.sendTxt("+14153597320", "FNORD HELLO HELLO");
+
     Serial.println(" sent. Waiting 15 seconds for phone to finish.");
 
     for (int i = 0; i < 15; ++i) {
@@ -211,5 +215,6 @@ int send_email(void) {
     pinMode(TXpin, INPUT); // high impedance
     pinMode(RXpin, INPUT);
 
-    digitalWrite(PHONE_PIN, LOW);
+    //    digitalWrite(PHONE_PIN, LOW);
+    digitalWrite(PHONE_PIN, HIGH);
 }
