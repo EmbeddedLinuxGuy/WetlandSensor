@@ -28,7 +28,6 @@ int send_email(void);
 
 // instantiate ModbusMaster object as serial port 1 slave ID 1
 ModbusMaster node(1, 1);
-SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
 
 int email_sent = 0;
 int attempt = 0;
@@ -46,7 +45,11 @@ uint32_t level;
 
 void setup()
 {
+    pinMode(TXpin, INPUT); // high impedance
+    pinMode(RXpin, INPUT);
+
     pinMode(DE_PIN, OUTPUT);
+
     pinMode(PHONE_PIN, OUTPUT);
     digitalWrite(PHONE_PIN, LOW);
 
@@ -136,6 +139,8 @@ void loop()
 
 int send_email(void) {
     digitalWrite(PHONE_PIN, HIGH);
+    SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
+
     Serial.println("Please wait 5 seconds for the phone to power up");
     //    delay(30000);
     delay(5000);
@@ -151,6 +156,7 @@ int send_email(void) {
     //    Serial.println("Please wait 60 seconds for the phone to get ready");
     //    delay(1000);
 
+    phone.sendTickle();
     Serial.print("Batt: ");
     Serial.print(phone.batt());
     Serial.println("%");
@@ -187,13 +193,23 @@ int send_email(void) {
     msg[6] = 0;
  
    
-    phone.sendEmail("embeddedlinuxguy@gmail.com", msg);
+    phone.sendEmail("embeddedlinuxguy@gmail.com", "FNORD HELLO HELLO");
     Serial.println(" sent. Waiting 15 seconds for phone to finish.");
 
     for (int i = 0; i < 15; ++i) {
 	Serial.println(i);
 	delay(1000);
     }
+
+
+    // Normally NewSoftSerial manages these two pins, but we want to
+    // keep TXpin in high impedance when it's not needed. The
+    // destructor of NewSoftSerial is called after this, but it
+    // doesn't monkey with TXpin (although it will clear a bit on
+    // RXpin)
+
+    pinMode(TXpin, INPUT); // high impedance
+    pinMode(RXpin, INPUT);
 
     digitalWrite(PHONE_PIN, LOW);
 }
