@@ -6,6 +6,7 @@
   Copyright 2009, 2010 Doc Walker <dfwmountaineers at gmail dot com>
   
 */
+#define DE_PIN 13
 
 #undef WAIT_FOR_USER // define if there is a console connected
 int data_ready = 0; // set to 1 if there is no sensor
@@ -19,9 +20,14 @@ int data_ready = 0; // set to 1 if there is no sensor
 #define LEVEL_REG 53
 #define SALINITY_REG 77
 
-#include <NewSoftSerial.h>
-#include "SSerial2Mobile.h"
+#include <SoftwareSerial.h>
+
+/*#include <NewSoftSerial.h>
+  #include "SSerial2Mobile.h"*/
 #include "ModbusMaster.h"
+#include "GSMSerial.h"
+
+GSMSerial phone(10, 11); //(RX) green, (TX) red
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count);
 int send_email(void);
@@ -139,14 +145,14 @@ void loop()
 
 int send_email(void) {
     digitalWrite(PHONE_PIN, HIGH);
-    SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin);
+    /*    SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin); */
 
     Serial.println("Please wait 5 seconds for the phone to power up");
     //    delay(30000);
     delay(5000);
     Serial.println("Initializing serial port / Soft Reset and waiting 30 seconds");
-    phone.begin();
-    phone.on();
+    /*    phone.begin();
+	  phone.on();*/
     delay(30000);
 
     //    Serial.println("Please wait 60 seconds for the phone to turn on");
@@ -156,20 +162,20 @@ int send_email(void) {
     //    Serial.println("Please wait 60 seconds for the phone to get ready");
     //    delay(1000);
 
-    phone.sendTickle();
+    /*    phone.sendTickle();
     Serial.print("Batt: ");
     Serial.print(phone.batt());
     Serial.println("%");
     
     Serial.print("RSSI: ");
-    Serial.println(phone.rssi());
+    Serial.println(phone.rssi());*/
   // Any RSSI over >=5 should be fine for SMS
   // SMS:  5
   // voice:  10
   // data:  20
   
     delay(1000);
-    phone.sendTickle();
+    /*    phone.sendTickle();*/
     Serial.println("Sent tickle");
     /*
      phone.sendTxtMode();
@@ -193,7 +199,7 @@ int send_email(void) {
     msg[6] = 0;
  
    
-    phone.sendEmail("embeddedlinuxguy@gmail.com", "FNORD HELLO HELLO");
+    /*    phone.sendEmail("embeddedlinuxguy@gmail.com", "FNORD HELLO HELLO");*/
     Serial.println(" sent. Waiting 15 seconds for phone to finish.");
 
     for (int i = 0; i < 15; ++i) {
