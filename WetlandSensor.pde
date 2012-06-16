@@ -9,7 +9,7 @@
 #define DE_PIN 13
 
 #undef WAIT_FOR_USER // define if there is a console connected
-int data_ready = 1; // set to 1 if there is no sensor
+int data_ready = 0; // set to 1 if there is no sensor
 
 #define RXpin 10 //Green
 #define TXpin 11 //Red
@@ -21,20 +21,20 @@ int data_ready = 1; // set to 1 if there is no sensor
 #define SALINITY_REG 77
 
 #include <SoftwareSerial.h>
-
 /*#include <NewSoftSerial.h>
   #include "SSerial2Mobile.h"*/
 #include "ModbusMaster.h"
 #include "GSMSerial.h"
 #define CONTACT "121"
+#include "LowPower.h"
 
 GSMSerial phone(10, 11); //(RX) green, (TX) red
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count);
 int send_email(void);
 
-// instantiate ModbusMaster object as serial port 1 slave ID 1
-ModbusMaster node(1, 1);
+// instantiate ModbusMaster object as serial port 0 slave ID 1
+ModbusMaster node(0, 1);
 
 // rx, tx
 //SoftwareSerial console(2, 3);
@@ -148,6 +148,8 @@ void loop()
       send_email();
       email_sent = 1;
   }
+
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);  
 }
 
 int send_email(void) {
