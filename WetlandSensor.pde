@@ -36,6 +36,10 @@ int send_email(void);
 // instantiate ModbusMaster object as serial port 1 slave ID 1
 ModbusMaster node(1, 1);
 
+// rx, tx
+//SoftwareSerial console(2, 3);
+SoftwareSerial console(3, 2);
+
 int email_sent = 0;
 int attempt = 0;
 
@@ -64,11 +68,13 @@ void setup()
     node.begin(sensor_baud_rate);
 
     // Set Serial 1 (Node) to 8E1 (Serial 0 == UCSR0C)
-    UCSR1C |= _8e1_or;
-    UCSR1C &= _8e1_and;
+    //    UCSR1C |= _8e1_or;
+    //UCSR1C &= _8e1_and;
+    UCSR0C |= _8e1_or;
+    UCSR0C &= _8e1_and;
 
-    Serial.begin(debug_baud_rate);
-    Serial.println("Press ENTER to start reading data.");
+    console.begin(debug_baud_rate);
+    console.println("Press ENTER to start reading data.");
     attempt = 0;
 }
 
@@ -80,25 +86,25 @@ uint32_t zReadRegs(uint16_t addr, uint16_t count) {
   delay(1000);
   result = node.readHoldingRegisters(addr, count);
   if (result == node.ku8MBSuccess) {
-    Serial.write("data: {");
+    console.write("data: {");
     for (j = 0; j < count; j++) {
       data[j] = node.getResponseBuffer(j);
-      Serial.write('[');
-      Serial.print(data[j], DEC);
-      Serial.write(']');
+      console.write('[');
+      console.print(data[j], DEC);
+      console.write(']');
     }
-    Serial.write("}\n");
+    console.write("}\n");
     value |= data[0];
     value <<= 16;
     value |= data[1];
   } else {
-    Serial.write("error: ");
+    console.write("error: ");
     switch(result) {
-      case 0xE2: Serial.write("Response Timed Out"); break;
-      case 0xE0: Serial.write("Invalid Slave ID"); break;
-      default: Serial.print(result, DEC);
+      case 0xE2: console.write("Response Timed Out"); break;
+      case 0xE0: console.write("Invalid Slave ID"); break;
+      default: console.print(result, DEC);
       }
-    Serial.write("\n");
+    console.write("\n");
     value = 0xdeadbeef;
   }
   return value;
@@ -112,12 +118,12 @@ void loop()
 
 #ifdef WAIT_FOR_USER
   // Wait on serial console input to start sensing
-  if (attempt <= 1 && !Serial.available()) {
+  if (attempt <= 1 && !console.available()) {
     return;
   }
 
-  while (Serial.available()) {
-    Serial.read();
+  while (console.available()) {
+    console.read();
     attempt = 1;
   }
 
@@ -125,13 +131,13 @@ void loop()
 #endif // WAIT_FOR_USER
 
   if (!data_ready) {
-      Serial.write("Initial register read: ");
+      console.write("Initial register read: ");
       zReadRegs(0, 1);
-      Serial.write("Salinity: ");
+      console.write("Salinity: ");
       salinity = zReadRegs(SALINITY_REG, 8);
-      Serial.write("Level: ");
+      console.write("Level: ");
       level = zReadRegs(LEVEL_REG, 8);
-      Serial.write("Pressure: ");
+      console.write("Pressure: ");
       pressure = zReadRegs(PRESSURE_REG, 8);
       // XXX substitute invalid floating point value for 0xdeadbeef
       if (salinity != 0xdeadbeef && pressure != 0xdeadbeef && pressure != 0xdeadbeef) {
@@ -147,20 +153,20 @@ void loop()
 int send_email(void) {
     digitalWrite(PHONE_PIN, HIGH);
 
-    Serial.println("Please wait 10 seconds for the phone to power up");
+    console.println("Please wait 10 seconds for the phone to power up");
     for (int i=10; i >=0; --i) {
-	Serial.println(i);
+	console.println(i);
 	delay(1000);
     }
-    Serial.println("Sending");
+    console.println("Sending");
     phone.start();
     phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Salinity, uv89czxo");
-        phone.openTxt(CONTACT);
-        phone.inTxt("embeddedlinuxguy@gmail.com Pi, ");
-        double pi= 3.14;
-        phone.inTxt(pi);
-        phone.closeTxt();
-    Serial.println("Done");
+    //        phone.openTxt(CONTACT);
+    //        phone.inTxt("embeddedlinuxguy@gmail.com Pi, ");
+    //        double pi= 3.14;
+    //        phone.inTxt(pi);
+    //        phone.closeTxt();
+    console.println("Done");
 
     return 0;
 
@@ -190,7 +196,7 @@ int send_email(void) {
   
     delay(1000);
     /*    phone.sendTickle();*/
-    Serial.println("Sent tickle");
+    console.println("Sent tickle");
     /*
      phone.sendTxtMode();
     Serial.println("Sent text mode command");
@@ -199,7 +205,7 @@ int send_email(void) {
     phone.sendTxtMsg("To what doth it do???");
     Serial.println("Sent message");
     */
-    Serial.print("About to send email...");
+    console.print("About to send email...");
 
     unsigned long *sval = (unsigned long *)&salinity;
     unsigned long *pval = (unsigned long *)&pressure;
@@ -214,10 +220,10 @@ int send_email(void) {
  
    
     /*    phone.sendEmail("embeddedlinuxguy@gmail.com", "FNORD HELLO HELLO");*/
-    Serial.println(" sent. Waiting 15 seconds for phone to finish.");
+    console.println(" sent. Waiting 15 seconds for phone to finish.");
 
     for (int i = 0; i < 15; ++i) {
-	Serial.println(i);
+	console.println(i);
 	delay(1000);
     }
 
