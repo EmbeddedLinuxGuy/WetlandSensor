@@ -9,7 +9,7 @@
 #define DE_PIN 13
 
 #undef WAIT_FOR_USER // define if there is a console connected
-int data_ready = 0; // set to 1 if there is no sensor
+int data_ready = 1; // set to 1 if there is no sensor
 
 #define RXpin 10 //Green
 #define TXpin 11 //Red
@@ -26,6 +26,7 @@ int data_ready = 0; // set to 1 if there is no sensor
   #include "SSerial2Mobile.h"*/
 #include "ModbusMaster.h"
 #include "GSMSerial.h"
+#define CONTACT "121"
 
 GSMSerial phone(10, 11); //(RX) green, (TX) red
 
@@ -51,8 +52,8 @@ uint32_t level;
 
 void setup()
 {
-    pinMode(TXpin, INPUT); // high impedance
-    pinMode(RXpin, INPUT);
+    //    pinMode(TXpin, INPUT); // high impedance
+    //    pinMode(RXpin, INPUT);
 
     pinMode(DE_PIN, OUTPUT);
 
@@ -145,12 +146,25 @@ void loop()
 
 int send_email(void) {
     digitalWrite(PHONE_PIN, HIGH);
-    /*    SSerial2Mobile phone = SSerial2Mobile(RXpin, TXpin); */
 
-    Serial.println("Please wait 5 seconds for the phone to power up");
-    //    delay(30000);
-    delay(5000);
-    Serial.println("Initializing serial port / Soft Reset and waiting 30 seconds");
+    Serial.println("Please wait 10 seconds for the phone to power up");
+    for (int i=10; i >=0; --i) {
+	Serial.println(i);
+	delay(1000);
+    }
+    Serial.println("Sending");
+    phone.start();
+    phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Salinity, uv89czxo");
+        phone.openTxt(CONTACT);
+        phone.inTxt("embeddedlinuxguy@gmail.com Pi, ");
+        double pi= 3.14;
+        phone.inTxt(pi);
+        phone.closeTxt();
+    Serial.println("Done");
+
+    return 0;
+
+
     /*    phone.begin();
 	  phone.on();*/
     delay(30000);
@@ -214,8 +228,8 @@ int send_email(void) {
     // doesn't monkey with TXpin (although it will clear a bit on
     // RXpin)
 
-    pinMode(TXpin, INPUT); // high impedance
-    pinMode(RXpin, INPUT);
+    //    pinMode(TXpin, INPUT); // high impedance
+    //    pinMode(RXpin, INPUT);
 
     digitalWrite(PHONE_PIN, LOW);
 }
