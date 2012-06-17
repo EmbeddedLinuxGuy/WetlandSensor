@@ -6,14 +6,16 @@
   Copyright 2009, 2010 Doc Walker <dfwmountaineers at gmail dot com>
   
 */
-#define DE_PIN 13
-
 #undef WAIT_FOR_USER // define if there is a console connected
 int data_ready = 0; // set to 1 if there is no sensor
 
+#include "GSMSerial.h"
+#define CONTACT "121"
 #define RXpin 10 //Green
 #define TXpin 11 //Red
 #define PHONE_PIN 9
+
+GSMSerial phone(RXpin, TXpin); //(RX) green, (TX) red
 
 #define PRESSURE_REG 37
 #define TEMPERATURE_REG 45
@@ -21,14 +23,8 @@ int data_ready = 0; // set to 1 if there is no sensor
 #define SALINITY_REG 77
 
 #include <SoftwareSerial.h>
-/*#include <NewSoftSerial.h>
-  #include "SSerial2Mobile.h"*/
 #include "ModbusMaster.h"
-#include "GSMSerial.h"
-#define CONTACT "121"
 #include "LowPower.h"
-
-GSMSerial phone(10, 11); //(RX) green, (TX) red
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count);
 int send_email(void);
@@ -37,7 +33,6 @@ int send_email(void);
 ModbusMaster node(0, 1);
 
 // rx, tx
-//SoftwareSerial console(2, 3);
 SoftwareSerial console(3, 2);
 
 int email_sent = 0;
@@ -56,9 +51,6 @@ uint32_t level;
 
 void setup()
 {
-    //    pinMode(TXpin, INPUT); // high impedance
-    //    pinMode(RXpin, INPUT);
-
     pinMode(DE_PIN, OUTPUT);
 
     pinMode(PHONE_PIN, OUTPUT);
@@ -67,47 +59,13 @@ void setup()
     // initialize Modbus
     node.begin(sensor_baud_rate);
 
-    // Set Serial 1 (Node) to 8E1 (Serial 0 == UCSR0C)
-    //    UCSR1C |= _8e1_or;
-    //UCSR1C &= _8e1_and;
+    // Set Serial 0 (Node) to 8E1
     UCSR0C |= _8e1_or;
     UCSR0C &= _8e1_and;
 
     console.begin(debug_baud_rate);
     console.println("Press ENTER to start reading data.");
     attempt = 0;
-}
-
-uint32_t zReadRegs(uint16_t addr, uint16_t count) {
-  uint8_t j, result;
-  uint16_t data[6];
-  uint32_t value = 0;
-
-  delay(1000);
-  result = node.readHoldingRegisters(addr, count);
-  if (result == node.ku8MBSuccess) {
-    console.write("data: {");
-    for (j = 0; j < count; j++) {
-      data[j] = node.getResponseBuffer(j);
-      console.write('[');
-      console.print(data[j], DEC);
-      console.write(']');
-    }
-    console.write("}\n");
-    value |= data[0];
-    value <<= 16;
-    value |= data[1];
-  } else {
-    console.write("error: ");
-    switch(result) {
-      case 0xE2: console.write("Response Timed Out"); break;
-      case 0xE0: console.write("Invalid Slave ID"); break;
-      default: console.print(result, DEC);
-      }
-    console.write("\n");
-    value = 0xdeadbeef;
-  }
-  return value;
 }
 
 void loop()
@@ -133,15 +91,18 @@ void loop()
   if (!data_ready) {
       console.write("Initial register read: ");
       zReadRegs(0, 1);
-      console.write("Salinity: ");
-      salinity = zReadRegs(SALINITY_REG, 8);
       console.write("Level: ");
       level = zReadRegs(LEVEL_REG, 8);
       console.write("Pressure: ");
       pressure = zReadRegs(PRESSURE_REG, 8);
+      console.write("Salinity: ");
+      salinity = zReadRegs(SALINITY_REG, 8);
       // XXX substitute invalid floating point value for 0xdeadbeef
       if (salinity != 0xdeadbeef && pressure != 0xdeadbeef && pressure != 0xdeadbeef) {
 	  data_ready = 1;
+	  console.print("Got data!\r\n");
+      } else {
+	  console.print("Did not get valid data.\r\n");
       }
   }
   if (!email_sent && data_ready) {
@@ -149,65 +110,50 @@ void loop()
       email_sent = 1;
   }
 
-    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);  
+    console.write("Sleeping\r\n\r");
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
 }
 
 int send_email(void) {
     digitalWrite(PHONE_PIN, HIGH);
-
-    console.println("Please wait 10 seconds for the phone to power up");
-    for (int i=10; i >=0; --i) {
-	console.println(i);
+    console.println("Please wait 5 seconds for the phone to power on:\n");
+    for (int i=5; i > 0; --i) {
+	console.print(i); console.print(' ');
 	delay(1000);
     }
-    console.println("Sending");
+    console.println("\nPlease wait 60 seconds for phone to find signal:\n");
     phone.start();
-    phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Salinity, uv89czxo");
-    //        phone.openTxt(CONTACT);
-    //        phone.inTxt("embeddedlinuxguy@gmail.com Pi, ");
-    //        double pi= 3.14;
-    //        phone.inTxt(pi);
-    //        phone.closeTxt();
+    phone.reset();
+
+    for (int i=60; i > 0; --i) {
+	console.print(i); console.print(' ');
+	delay(1000);
+    }
+
+    console.println("Sending");
+    //    phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Salinity, uv89czxo");
+
+    //    double *fsal = &salinity;
+    //    double *fpre = &pressure;
+    //    double *flev = &level;
+    
+    if (0) {
+            phone.openTxt(CONTACT);
+            phone.inTxt("embeddedlinuxguy@gmail.com Salinity = ");
+	    phone.inTxt(0.23);
+	    //	    phone.inTxt(*fsal);
+	    phone.inTxt(", Pressure = ");
+	    phone.inTxt(1.44);
+	    //	    phone.inTxt(*fpre);
+	    phone.inTxt(", Level = ");
+	    phone.inTxt(6.66);
+	    //	    phone.inTxt(*flev);
+	                phone.closeTxt();
+    }
+    phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Placeholder for data");
     console.println("Done");
 
     return 0;
-
-
-    /*    phone.begin();
-	  phone.on();*/
-    delay(30000);
-
-    //    Serial.println("Please wait 60 seconds for the phone to turn on");
-    //    delay(1000);
-    //  returnVal=phone.isOK();
-    // Serial.println(returnVal, DEC);
-    //    Serial.println("Please wait 60 seconds for the phone to get ready");
-    //    delay(1000);
-
-    /*    phone.sendTickle();
-    Serial.print("Batt: ");
-    Serial.print(phone.batt());
-    Serial.println("%");
-    
-    Serial.print("RSSI: ");
-    Serial.println(phone.rssi());*/
-  // Any RSSI over >=5 should be fine for SMS
-  // SMS:  5
-  // voice:  10
-  // data:  20
-  
-    delay(1000);
-    /*    phone.sendTickle();*/
-    console.println("Sent tickle");
-    /*
-     phone.sendTxtMode();
-    Serial.println("Sent text mode command");
-    phone.sendTxtNumber("+14153597320");
-    Serial.println("Sent number");
-    phone.sendTxtMsg("To what doth it do???");
-    Serial.println("Sent message");
-    */
-    console.print("About to send email...");
 
     unsigned long *sval = (unsigned long *)&salinity;
     unsigned long *pval = (unsigned long *)&pressure;
@@ -219,25 +165,45 @@ int send_email(void) {
 	msg[i] = ' ' + (char)(mask & (*sval >> 6*i));
     }
     msg[6] = 0;
- 
-   
-    /*    phone.sendEmail("embeddedlinuxguy@gmail.com", "FNORD HELLO HELLO");*/
-    console.println(" sent. Waiting 15 seconds for phone to finish.");
 
+    console.println(msg);
+    console.println(" sent. Waiting 15 seconds for phone to finish.");
     for (int i = 0; i < 15; ++i) {
 	console.println(i);
 	delay(1000);
     }
 
-
-    // Normally NewSoftSerial manages these two pins, but we want to
-    // keep TXpin in high impedance when it's not needed. The
-    // destructor of NewSoftSerial is called after this, but it
-    // doesn't monkey with TXpin (although it will clear a bit on
-    // RXpin)
-
-    //    pinMode(TXpin, INPUT); // high impedance
-    //    pinMode(RXpin, INPUT);
-
     digitalWrite(PHONE_PIN, LOW);
+}
+
+uint32_t zReadRegs(uint16_t addr, uint16_t count) {
+  uint8_t j, result;
+  uint16_t data[6];
+  uint32_t value = 0;
+
+  delay(1000);
+  result = node.readHoldingRegisters(addr, count);
+  if (result == node.ku8MBSuccess) {
+    console.write("data: {");
+    for (j = 0; j < count; j++) {
+      data[j] = node.getResponseBuffer(j);
+      console.write('[');
+      console.print(data[j], DEC);
+      console.write(']');
+    }
+    console.write("}\r\n");
+    value |= data[0];
+    value <<= 16;
+    value |= data[1];
+  } else {
+    console.write("error: ");
+    switch(result) {
+      case 0xE2: console.write("Response Timed Out"); break;
+      case 0xE0: console.write("Invalid Slave ID"); break;
+      default: console.print(result, DEC);
+      }
+    console.write("\r\n");
+    value = 0xdeadbeef;
+  }
+  return value;
 }
