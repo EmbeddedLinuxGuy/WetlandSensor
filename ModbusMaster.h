@@ -29,8 +29,7 @@ Arduino library for communicating with Modbus slaves over RS232/485 (via RTU pro
   along with ModbusMaster.  If not, see <http://www.gnu.org/licenses/>.
   
   Written by Doc Walker (Rx)
-  Copyright 2009, 2010 Doc Walker <dfwmountaineers at gmail dot com>
-  $Id: ModbusMaster.h 39 2010-02-10 02:12:21Z dfwmountaineers $
+  Copyright © 2009-2011 Doc Walker <dfwmountaineers at gmail dot com>
   
 */
 
@@ -50,8 +49,11 @@ Set to 1 to enable debugging features within class:
 
 /* _____STANDARD INCLUDES____________________________________________________ */
 // include types & constants of Wiring core API
+#if defined(ARDUINO) && ARDUINO >= 100
+#include "Arduino.h"
+#else
 #include "WProgram.h"
-
+#endif
 
 /* _____UTILITY MACROS_______________________________________________________ */
 /**
@@ -91,10 +93,11 @@ class ModbusMaster
   public:
     ModbusMaster();
     ModbusMaster(uint8_t);
-    ModbusMaster(uint8_t, uint8_t);
+    ModbusMaster(uint8_t, uint8_t, uint16_t);
     
     void begin();
     void begin(uint16_t);
+    void idle(void (*)());
     
     // Modbus exception codes
     /**
@@ -212,9 +215,17 @@ class ModbusMaster
     void     clearResponseBuffer();
     uint8_t  setTransmitBuffer(uint8_t, uint16_t);
     void     clearTransmitBuffer();
-
-    void fuck_around(void);
-
+    
+    void beginTransmission(uint16_t);
+    uint8_t requestFrom(uint16_t, uint16_t);
+    void sendBit(bool);
+    void send(uint8_t);
+    void send(uint16_t);
+    void send(uint32_t);
+    uint8_t available(void);
+    uint16_t receive(void);
+    
+    
     uint8_t  readCoils(uint16_t, uint16_t);
     uint8_t  readDiscreteInputs(uint16_t, uint16_t);
     uint8_t  readHoldingRegisters(uint16_t, uint16_t);
@@ -222,10 +233,16 @@ class ModbusMaster
     uint8_t  writeSingleCoil(uint16_t, uint8_t);
     uint8_t  writeSingleRegister(uint16_t, uint16_t);
     uint8_t  writeMultipleCoils(uint16_t, uint16_t);
+    uint8_t  writeMultipleCoils();
     uint8_t  writeMultipleRegisters(uint16_t, uint16_t);
+    uint8_t  writeMultipleRegisters();
     uint8_t  maskWriteRegister(uint16_t, uint16_t, uint16_t);
     uint8_t  readWriteMultipleRegisters(uint16_t, uint16_t, uint16_t, uint16_t);
-    
+    uint8_t  readWriteMultipleRegisters(uint16_t, uint16_t);
+
+    // Modbus timeout [milliseconds]
+    uint16_t ku8MBResponseTimeout;
+
   private:
     uint8_t  _u8SerialPort;                                      ///< serial port (0..3) initialized in constructor
     uint8_t  _u8MBSlave;                                         ///< Modbus slave (1..255) initialized in constructor
@@ -237,6 +254,12 @@ class ModbusMaster
     uint16_t _u16WriteAddress;                                   ///< slave register to which to write
     uint16_t _u16WriteQty;                                       ///< quantity of words to write
     uint16_t _u16TransmitBuffer[ku8MaxBufferSize];               ///< buffer containing data to transmit to Modbus slave; set via SetTransmitBuffer()
+    uint16_t* txBuffer; // from Wire.h -- need to clean this up Rx
+    uint8_t _u8TransmitBufferIndex;
+    uint16_t u16TransmitBufferLength;
+    uint16_t* rxBuffer; // from Wire.h -- need to clean this up Rx
+    uint8_t _u8ResponseBufferIndex;
+    uint8_t _u8ResponseBufferLength;
     
     // Modbus function codes for bit access
     static const uint8_t ku8MBReadCoils                  = 0x01; ///< Modbus function 0x01 Read Coils
@@ -252,11 +275,11 @@ class ModbusMaster
     static const uint8_t ku8MBMaskWriteRegister          = 0x16; ///< Modbus function 0x16 Mask Write Register
     static const uint8_t ku8MBReadWriteMultipleRegisters = 0x17; ///< Modbus function 0x17 Read Write Multiple Registers
     
-    // Modbus timeout [milliseconds]
-    static const uint16_t ku8MBResponseTimeout            = 1000;  ///< Modbus timeout [milliseconds]
-    
     // master function that conducts Modbus transactions
     uint8_t ModbusMasterTransaction(uint8_t u8MBFunction);
+    
+    // idle callback function; gets called during idle time between TX and RX
+    void (*_idle)();
 };
 
 #define DE_PIN 13

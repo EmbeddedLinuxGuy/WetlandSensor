@@ -1,3 +1,4 @@
+extern int GLOBAL_TIMEOUT;
 /* -*- c++ -*- 
 
   Wetland Sensor - reads from AquaTroll sensor, emails data over cell phone
@@ -8,6 +9,7 @@
 */
 #undef WAIT_FOR_USER // define if there is a console connected
 int data_ready = 0; // set to 1 if there is no sensor
+int test = 1; // don't really send email
 
 #include "GSMSerial.h"
 #define CONTACT "121"
@@ -29,13 +31,14 @@ GSMSerial phone(RXpin, TXpin); //(RX) green, (TX) red
 uint32_t zReadRegs(uint16_t addr, uint16_t count);
 int send_email(void);
 
-// instantiate ModbusMaster object as serial port 0 slave ID 1
-ModbusMaster node(0, 1);
+// instantiate ModbusMaster object as serial port 0 slave ID 1, 1000ms timeout
+ModbusMaster node(0, 1, 1000);
 
 // rx, tx
 SoftwareSerial console(3, 2);
 
-int email_sent = 0;
+uint8_t result; // last Modbus result code
+int email_sent = 0; // bool true if email has been sent
 int attempt = 0;
 
 //uint32_t temperature;
@@ -90,6 +93,7 @@ void loop()
 
   if (!data_ready) {
       console.write("Initial register read: ");
+      
       zReadRegs(0, 1);
       console.write("Level: ");
       level = zReadRegs(LEVEL_REG, 8);
@@ -98,7 +102,7 @@ void loop()
       console.write("Salinity: ");
       salinity = zReadRegs(SALINITY_REG, 8);
       // XXX substitute invalid floating point value for 0xdeadbeef
-      if (salinity != 0xdeadbeef && pressure != 0xdeadbeef && pressure != 0xdeadbeef) {
+      if (salinity != 0xdeadbeef && pressure != 0xdeadbeef && level != 0xdeadbeef) {
 	  data_ready = 1;
 	  console.print("Got data!\r\n");
       } else {
@@ -116,22 +120,30 @@ void loop()
 
 int send_email(void) {
     digitalWrite(PHONE_PIN, HIGH);
+    if(test){console.print("Testing phone (will not send email)\r\n");}
     console.println("Please wait 5 seconds for the phone to power on:\n");
     for (int i=5; i > 0; --i) {
 	console.print(i); console.print(' ');
 	delay(1000);
     }
     console.println("\nPlease wait 60 seconds for phone to find signal:\n");
-    phone.start();
-    phone.reset();
+    if(!test){phone.start();}
+    if(!test){phone.reset();}
 
     for (int i=60; i > 0; --i) {
 	console.print(i); console.print(' ');
 	delay(1000);
     }
 
-    console.println("Sending");
-    //    phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Salinity, uv89czxo");
+    if (! test) {
+        console.println("Sending");
+	phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Salinity, uv89czxo");
+    } else {
+	console.println("Test mode, not sending");
+    }
+    console.println("Done");
+
+    return 0;
 
     //    double *fsal = &salinity;
     //    double *fpre = &pressure;
@@ -150,10 +162,7 @@ int send_email(void) {
 	    //	    phone.inTxt(*flev);
 	                phone.closeTxt();
     }
-    phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Placeholder for data");
-    console.println("Done");
-
-    return 0;
+    //    phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Placeholder for data");
 
     unsigned long *sval = (unsigned long *)&salinity;
     unsigned long *pval = (unsigned long *)&pressure;
@@ -177,11 +186,11 @@ int send_email(void) {
 }
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count) {
-  uint8_t j, result;
+    uint8_t j;
   uint16_t data[6];
   uint32_t value = 0;
 
-  delay(1000);
+  //  delay(1000);
   result = node.readHoldingRegisters(addr, count);
   if (result == node.ku8MBSuccess) {
     console.write("data: {");
