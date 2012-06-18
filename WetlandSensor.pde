@@ -1,4 +1,3 @@
-extern int GLOBAL_TIMEOUT;
 /* -*- c++ -*- 
 
   Wetland Sensor - reads from AquaTroll sensor, emails data over cell phone
@@ -9,7 +8,7 @@ extern int GLOBAL_TIMEOUT;
 */
 #undef WAIT_FOR_USER // define if there is a console connected
 int data_ready = 0; // set to 1 if there is no sensor
-int test = 1; // don't really send email
+int test = 0; // don't really send email
 
 #include "GSMSerial.h"
 #define CONTACT "121"
@@ -41,7 +40,7 @@ uint8_t result; // last Modbus result code
 int email_sent = 0; // bool true if email has been sent
 int attempt = 0;
 
-//uint32_t temperature;
+uint32_t temperature;
 uint32_t pressure;
 uint32_t salinity;
 uint32_t level;
@@ -101,8 +100,12 @@ void loop()
       pressure = zReadRegs(PRESSURE_REG, 8);
       console.write("Salinity: ");
       salinity = zReadRegs(SALINITY_REG, 8);
+      console.write("Temperature: ");
+      temperature = zReadRegs(TEMPERATURE_REG, 8);
+
       // XXX substitute invalid floating point value for 0xdeadbeef
-      if (salinity != 0xdeadbeef && pressure != 0xdeadbeef && level != 0xdeadbeef) {
+      if (salinity != 0xdeadbeef && pressure != 0xdeadbeef
+	  && level != 0xdeadbeef && temperature != 0xdeadbeef) {
 	  data_ready = 1;
 	  console.print("Got data!\r\n");
       } else {
@@ -119,13 +122,31 @@ void loop()
 }
 
 int send_email(void) {
-    digitalWrite(PHONE_PIN, HIGH);
+    digitalWrite(PHONE_PIN, LOW);
     if(test){console.print("Testing phone (will not send email)\r\n");}
+
+    unsigned long *sval = (unsigned long *)&salinity;
+    unsigned long *pval = (unsigned long *)&pressure;
+    unsigned long *lval = (unsigned long *)&level;
+    unsigned long *tval = (unsigned long *)&temperature;
+
+    unsigned long mask = 0x0000003f;
+    char msg[7];
+    for (int i = 0; i < 6; ++i) {
+	msg[i] = ' ' + (char)(mask & (*tval >> 6*i));
+    }
+    msg[6] = 0;
+
+    console.write("\r\nTemperature is [");
+    console.write(msg);
+    console.write("]\r\n");
+
     console.println("Please wait 5 seconds for the phone to power on:\n");
     for (int i=5; i > 0; --i) {
 	console.print(i); console.print(' ');
 	delay(1000);
     }
+
     console.println("\nPlease wait 60 seconds for phone to find signal:\n");
     if(!test){phone.start();}
     if(!test){phone.reset();}
@@ -136,53 +157,19 @@ int send_email(void) {
     }
 
     if (! test) {
-        console.println("Sending");
+        console.print("Sending...\r\n");
 	phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Salinity, uv89czxo");
     } else {
-	console.println("Test mode, not sending");
+	console.print("Test mode, not sending.\r\n");
     }
-    console.println("Done");
 
-    return 0;
-
-    //    double *fsal = &salinity;
-    //    double *fpre = &pressure;
-    //    double *flev = &level;
-    
-    if (0) {
-            phone.openTxt(CONTACT);
-            phone.inTxt("embeddedlinuxguy@gmail.com Salinity = ");
-	    phone.inTxt(0.23);
-	    //	    phone.inTxt(*fsal);
-	    phone.inTxt(", Pressure = ");
-	    phone.inTxt(1.44);
-	    //	    phone.inTxt(*fpre);
-	    phone.inTxt(", Level = ");
-	    phone.inTxt(6.66);
-	    //	    phone.inTxt(*flev);
-	                phone.closeTxt();
-    }
-    //    phone.sendTxt(CONTACT, "embeddedlinuxguy@gmail.com Placeholder for data");
-
-    unsigned long *sval = (unsigned long *)&salinity;
-    unsigned long *pval = (unsigned long *)&pressure;
-    unsigned long *lval = (unsigned long *)&level;
-
-    unsigned long mask = 0x0000003f;
-    char msg[7];
-    for (int i = 0; i < 6; ++i) {
-	msg[i] = ' ' + (char)(mask & (*sval >> 6*i));
-    }
-    msg[6] = 0;
-
-    console.println(msg);
-    console.println(" sent. Waiting 15 seconds for phone to finish.");
+    console.print("Waiting 15 seconds for phone to finish.\r\n");
     for (int i = 0; i < 15; ++i) {
 	console.println(i);
 	delay(1000);
     }
 
-    digitalWrite(PHONE_PIN, LOW);
+    digitalWrite(PHONE_PIN, HIGH);
 }
 
 uint32_t zReadRegs(uint16_t addr, uint16_t count) {

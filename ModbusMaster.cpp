@@ -1,4 +1,3 @@
-int GLOBAL_TIMEOUT;
 /**
 @file
 Arduino library for communicating with Modbus slaves over RS232/485 (via RTU protocol).
@@ -844,7 +843,6 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
       }
     }
     if (millis() > (u32StartTime + ku8MBResponseTimeout))
-    //if (millis() > (u32StartTime + GLOBAL_TIMEOUT))
     {
       u8MBStatus = ku8MBResponseTimedOut;
     }
