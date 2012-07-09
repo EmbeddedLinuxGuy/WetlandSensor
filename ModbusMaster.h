@@ -282,7 +282,8 @@ class ModbusMaster
     void (*_idle)();
 };
 
-#define DE_PIN 13
+#define DE_PIN 8//13
+#define SLEEP_PIN 12
 
 #endif
 

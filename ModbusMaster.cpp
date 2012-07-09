@@ -142,10 +142,12 @@ void ModbusMaster::begin(uint16_t u16BaudRate)
   }
 
   digitalWrite(DE_PIN, HIGH); // transmit mode
-  delay(1);
+   digitalWrite(SLEEP_PIN, HIGH); // not sure what this means
+   delay(5);  // 1
   MBSerial.begin(u16BaudRate);
   delay(2);
   digitalWrite(DE_PIN, LOW); // receive mode
+  digitalWrite(SLEEP_PIN, LOW);
 
 #if __MODBUSMASTER_DEBUG__
   pinMode(4, OUTPUT);
@@ -750,7 +752,9 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
   u8ModbusADU[u8ModbusADUSize] = 0;
 
   digitalWrite(DE_PIN, HIGH); // transmit mode
-  delay(1); // 1 ms
+   digitalWrite(SLEEP_PIN, HIGH);
+
+  delay(5); // 1 ms
   // transmit request
   for (i = 0; i < u8ModbusADUSize; i++)
   {
@@ -765,7 +769,8 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
   MBSerial.flush();
   delay(2); // 2 ms
   digitalWrite(DE_PIN, LOW); // receive mode
-  
+  digitalWrite(SLEEP_PIN, LOW);
+
   // loop until we run out of time or bytes, or an error occurs
   u32StartTime = millis();
   while (u8BytesLeft && !u8MBStatus)
