@@ -23,8 +23,7 @@ Arduino library for communicating with Modbus slaves over RS232/485 (via RTU pro
   along with ModbusMaster.  If not, see <http://www.gnu.org/licenses/>.
   
   Written by Doc Walker (Rx)
-  Copyright 2009, 2010 Doc Walker <dfwmountaineers at gmail dot com>
-  $Id: ModbusMaster.cpp 39 2010-02-10 02:12:21Z dfwmountaineers $
+  Copyright © 2009-2011 Doc Walker <dfwmountaineers at gmail dot com>
   
 */
 
@@ -34,7 +33,7 @@ Arduino library for communicating with Modbus slaves over RS232/485 (via RTU pro
 
 
 /* _____GLOBAL VARIABLES_____________________________________________________ */
-HardwareSerial MBSerial = Serial1; ///< Pointer to Serial class object
+HardwareSerial MBSerial = Serial; ///< Pointer to Serial class object
 
 
 /* _____PUBLIC FUNCTIONS_____________________________________________________ */
@@ -74,14 +73,15 @@ Constructor.
 Creates class object using specified serial port, Modbus slave ID.
 
 @overload void ModbusMaster::ModbusMaster(uint8_t u8SerialPort, uint8_t u8MBSlave)
-@param u8SerialPort serial port (0..3)
+@param u8SerialPort serial port (Serial, Serial1..Serial3)
 @param u8MBSlave Modbus slave ID (1..255)
 @ingroup setup
 */
-ModbusMaster::ModbusMaster(uint8_t u8SerialPort, uint8_t u8MBSlave)
+ModbusMaster::ModbusMaster(uint8_t u8SerialPort, uint8_t u8MBSlave, uint16_t timeout)
 {
   _u8SerialPort = (u8SerialPort > 3) ? 0 : u8SerialPort;
   _u8MBSlave = u8MBSlave;
+  ku8MBResponseTimeout = timeout;
 }
 
 
@@ -111,17 +111,25 @@ Call once class has been instantiated, typically within setup().
 */
 void ModbusMaster::begin(uint16_t u16BaudRate)
 {
+//  txBuffer = (uint16_t*) calloc(ku8MaxBufferSize, sizeof(uint16_t));
+  _u8TransmitBufferIndex = 0;
+  u16TransmitBufferLength = 0;
+  
   switch(_u8SerialPort)
   {
-#if defined(__AVR_ATmega1280__)
+#if defined(UBRR1H)
     case 1:
       MBSerial = Serial1;
       break;
+#endif
       
+#if defined(UBRR2H)
     case 2:
       MBSerial = Serial2;
       break;
+#endif
       
+#if defined(UBRR3H)
     case 3:
       MBSerial = Serial3;
       break;
@@ -129,20 +137,133 @@ void ModbusMaster::begin(uint16_t u16BaudRate)
       
     case 0:
     default:
-      MBSerial = Serial1;
+      MBSerial = Serial;
       break;
   }
-  
+
   digitalWrite(DE_PIN, HIGH); // transmit mode
-  delay(1);
+   digitalWrite(SLEEP_PIN, HIGH); // not sure what this means
+   delay(5);  // 1
   MBSerial.begin(u16BaudRate);
   delay(2);
   digitalWrite(DE_PIN, LOW); // receive mode
+  digitalWrite(SLEEP_PIN, LOW);
 
 #if __MODBUSMASTER_DEBUG__
   pinMode(4, OUTPUT);
   pinMode(5, OUTPUT);
 #endif
+}
+
+
+void ModbusMaster::beginTransmission(uint16_t u16Address)
+{
+  _u16WriteAddress = u16Address;
+  _u8TransmitBufferIndex = 0;
+  u16TransmitBufferLength = 0;
+}
+
+// eliminate this function in favor of using existing MB request functions
+uint8_t ModbusMaster::requestFrom(uint16_t address, uint16_t quantity)
+{
+  uint8_t read;
+  // clamp to buffer length
+  if(quantity > ku8MaxBufferSize)
+  {
+    quantity = ku8MaxBufferSize;
+  }
+  // set rx buffer iterator vars
+  _u8ResponseBufferIndex = 0;
+  _u8ResponseBufferLength = read;
+
+  return read;
+}
+
+
+void ModbusMaster::sendBit(bool data)
+{
+  uint8_t txBitIndex = u16TransmitBufferLength % 16;
+  if ((u16TransmitBufferLength >> 4) < ku8MaxBufferSize)
+  {
+    if (0 == txBitIndex)
+    {
+      _u16TransmitBuffer[_u8TransmitBufferIndex] = 0;
+    }
+    bitWrite(_u16TransmitBuffer[_u8TransmitBufferIndex], txBitIndex, data);
+    u16TransmitBufferLength++;
+    _u8TransmitBufferIndex = u16TransmitBufferLength >> 4;
+  }
+}
+
+
+void ModbusMaster::send(uint16_t data)
+{
+  if (_u8TransmitBufferIndex < ku8MaxBufferSize)
+  {
+    _u16TransmitBuffer[_u8TransmitBufferIndex++] = data;
+    u16TransmitBufferLength = _u8TransmitBufferIndex << 4;
+  }
+}
+
+
+void ModbusMaster::send(uint32_t data)
+{
+  send(lowWord(data));
+  send(highWord(data));
+}
+
+
+void ModbusMaster::send(uint8_t data)
+{
+  send(word(data));
+}
+
+
+
+
+
+
+
+
+
+uint8_t ModbusMaster::available(void)
+{
+  return _u8ResponseBufferLength - _u8ResponseBufferIndex;
+}
+
+
+uint16_t ModbusMaster::receive(void)
+{
+  if (_u8ResponseBufferIndex < _u8ResponseBufferLength)
+  {
+    return _u16ResponseBuffer[_u8ResponseBufferIndex++];
+  }
+  else
+  {
+    return 0xFFFF;
+  }
+}
+
+
+
+
+
+
+
+
+/**
+Set idle time callback function (cooperative multitasking).
+
+This function gets called in the idle time between transmission of data
+and response from slave. Do not call functions that read from the serial
+buffer that is used by ModbusMaster. Use of i2c/TWI, 1-Wire, other
+serial ports, etc. is permitted within callback function.
+
+@see ModbusMaster::ModbusMasterTransaction()
+*/
+void ModbusMaster::idle(void (*idle)())
+{
+  _idle = idle;
 }
 
 
@@ -404,6 +525,11 @@ uint8_t ModbusMaster::writeMultipleCoils(uint16_t u16WriteAddress,
   _u16WriteQty = u16BitQty;
   return ModbusMasterTransaction(ku8MBWriteMultipleCoils);
 }
+uint8_t ModbusMaster::writeMultipleCoils()
+{
+  _u16WriteQty = u16TransmitBufferLength;
+  return ModbusMasterTransaction(ku8MBWriteMultipleCoils);
+}
 
 
 /**
@@ -425,6 +551,13 @@ uint8_t ModbusMaster::writeMultipleRegisters(uint16_t u16WriteAddress,
 {
   _u16WriteAddress = u16WriteAddress;
   _u16WriteQty = u16WriteQty;
+  return ModbusMasterTransaction(ku8MBWriteMultipleRegisters);
+}
+
+// new version based on Wire.h
+uint8_t ModbusMaster::writeMultipleRegisters()
+{
+  _u16WriteQty = _u8TransmitBufferIndex;
   return ModbusMasterTransaction(ku8MBWriteMultipleRegisters);
 }
 
@@ -490,14 +623,13 @@ uint8_t ModbusMaster::readWriteMultipleRegisters(uint16_t u16ReadAddress,
   _u16WriteQty = u16WriteQty;
   return ModbusMasterTransaction(ku8MBReadWriteMultipleRegisters);
 }
-
-void ModbusMaster::fuck_around(void) {
-  digitalWrite(DE_PIN, HIGH); // transmit
-  delay(1); // 1 ms
-  MBSerial.print("aI!");
-  MBSerial.flush();
-  delay(2); // 2 ms
-  digitalWrite(DE_PIN, LOW); // receive mode
+uint8_t ModbusMaster::readWriteMultipleRegisters(uint16_t u16ReadAddress,
+  uint16_t u16ReadQty)
+{
+  _u16ReadAddress = u16ReadAddress;
+  _u16ReadQty = u16ReadQty;
+  _u16WriteQty = _u8TransmitBufferIndex;
+  return ModbusMasterTransaction(ku8MBReadWriteMultipleRegisters);
 }
 
 
@@ -521,7 +653,7 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
   uint8_t u8ModbusADUSize = 0;
   uint8_t i, u8Qty;
   uint16_t u16CRC;
-  uint16_t u8TimeLeft = ku8MBResponseTimeout;
+  uint32_t u32StartTime;
   uint8_t u8BytesLeft = 8;
   uint8_t u8MBStatus = ku8MBSuccess;
   
@@ -609,7 +741,6 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
       break;
   }
   
-  
   // append CRC
   u16CRC = 0xFFFF;
   for (i = 0; i < u8ModbusADUSize; i++)
@@ -619,21 +750,30 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
   u8ModbusADU[u8ModbusADUSize++] = lowByte(u16CRC);
   u8ModbusADU[u8ModbusADUSize++] = highByte(u16CRC);
   u8ModbusADU[u8ModbusADUSize] = 0;
-  
+
   digitalWrite(DE_PIN, HIGH); // transmit mode
-  delay(1); // 1 ms
+   digitalWrite(SLEEP_PIN, HIGH);
+
+  delay(5); // 1 ms
   // transmit request
   for (i = 0; i < u8ModbusADUSize; i++)
   {
+#if defined(ARDUINO) && ARDUINO >= 100
+    MBSerial.write(u8ModbusADU[i]);
+#else
     MBSerial.print(u8ModbusADU[i], BYTE);
+#endif
   }
+  
   u8ModbusADUSize = 0;
   MBSerial.flush();
   delay(2); // 2 ms
   digitalWrite(DE_PIN, LOW); // receive mode
+  digitalWrite(SLEEP_PIN, LOW);
 
   // loop until we run out of time or bytes, or an error occurs
-  while (u8TimeLeft && u8BytesLeft && !u8MBStatus)
+  u32StartTime = millis();
+  while (u8BytesLeft && !u8MBStatus)
   {
     if (MBSerial.available())
     {
@@ -651,9 +791,10 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
 #if __MODBUSMASTER_DEBUG__
       digitalWrite(5, true);
 #endif
-      //      delayMicroseconds(1000);
-      delayMicroseconds(1000);
-      u8TimeLeft--;
+      if (_idle)
+      {
+        _idle();
+      }
 #if __MODBUSMASTER_DEBUG__
       digitalWrite(5, false);
 #endif
@@ -697,6 +838,7 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
         case ku8MBWriteSingleCoil:
         case ku8MBWriteMultipleCoils:
         case ku8MBWriteSingleRegister:
+        case ku8MBWriteMultipleRegisters:
           u8BytesLeft = 3;
           break;
           
@@ -705,36 +847,28 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
           break;
       }
     }
-    
-    if (u8ModbusADUSize == 6)
+    if (millis() > (u32StartTime + ku8MBResponseTimeout))
     {
-      switch(u8ModbusADU[1])
-      {
-        case ku8MBWriteMultipleRegisters:
-          u8BytesLeft = u8ModbusADU[5];
-          break;
-      }
+      u8MBStatus = ku8MBResponseTimedOut;
     }
   }
   
   // verify response is large enough to inspect further
-  if (!u8MBStatus && (u8TimeLeft == 0 || u8ModbusADUSize < 5))
+  if (!u8MBStatus && u8ModbusADUSize >= 5)
   {
-    u8MBStatus = ku8MBResponseTimedOut;
-  }
-  
-  // calculate CRC
-  u16CRC = 0xFFFF;
-  for (i = 0; i < (u8ModbusADUSize - 2); i++)
-  {
-    u16CRC = _crc16_update(u16CRC, u8ModbusADU[i]);
-  }
-  
-  // verify CRC
-  if (!u8MBStatus && (lowByte(u16CRC) != u8ModbusADU[u8ModbusADUSize - 2] ||
-    highByte(u16CRC) != u8ModbusADU[u8ModbusADUSize - 1]))
-  {
-    u8MBStatus = ku8MBInvalidCRC;
+    // calculate CRC
+    u16CRC = 0xFFFF;
+    for (i = 0; i < (u8ModbusADUSize - 2); i++)
+    {
+      u16CRC = _crc16_update(u16CRC, u8ModbusADU[i]);
+    }
+    
+    // verify CRC
+    if (!u8MBStatus && (lowByte(u16CRC) != u8ModbusADU[u8ModbusADUSize - 2] ||
+      highByte(u16CRC) != u8ModbusADU[u8ModbusADUSize - 1]))
+    {
+      u8MBStatus = ku8MBInvalidCRC;
+    }
   }
 
   // disassemble ADU into words
@@ -752,6 +886,8 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
           {
             _u16ResponseBuffer[i] = word(u8ModbusADU[2 * i + 4], u8ModbusADU[2 * i + 3]);
           }
+          
+          _u8ResponseBufferLength = i;
         }
         
         // in the event of an odd number of bytes, load last byte into zero-padded word
@@ -761,6 +897,8 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
           {
             _u16ResponseBuffer[i] = word(0, u8ModbusADU[2 * i + 3]);
           }
+          
+          _u8ResponseBufferLength = i + 1;
         }
         break;
         
@@ -774,10 +912,15 @@ uint8_t ModbusMaster::ModbusMasterTransaction(uint8_t u8MBFunction)
           {
             _u16ResponseBuffer[i] = word(u8ModbusADU[2 * i + 3], u8ModbusADU[2 * i + 4]);
           }
+          
+          _u8ResponseBufferLength = i;
         }
         break;
     }
   }
   
+  _u8TransmitBufferIndex = 0;
+  u16TransmitBufferLength = 0;
+  _u8ResponseBufferIndex = 0;
   return u8MBStatus;
 }
